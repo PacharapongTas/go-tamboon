@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 )
 
 func main() {
@@ -47,46 +48,67 @@ func main() {
 
 	cfg := config.LoadConfig()
 	var client chargeapi.Client
-	client = chargeapi.NewOmiseClient(cfg.ChargeSecretKey, cfg.ChargePublicKey)
+	client = chargeapi.NewOmiseClient(cfg.ChargeSecretKey, cfg.ChargePublicKey, cfg.RateLimit)
 
 	results := make([]chargeapi.ChargeResponse, len(records))
-	var waitGroup sync.WaitGroup
-	workerCount := 8
-	jobs := make(chan int, len(records))
 
-	for w := 0; w < workerCount; w++ {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
-			for idx := range jobs {
-				rec := records[idx]
-				result := client.Charge(chargeapi.ChargeRequest{
-					Name:     rec.Name,
-					Amount:   rec.Amount,
-					Card:     rec.Card,
-					CVV:      rec.CVV,
-					ExpMonth: rec.ExpMonth,
-					ExpYear:  rec.ExpYear,
-				})
+	batchSize := cfg.BatchSize
+	batchDelay := cfg.BatchDelay
 
-				// if !result.Success {
-				// 	fmt.Printf("Charge %d failed: %v\n", idx+1, result.Error)
-				// } else {
-				// 	fmt.Printf("Charge %d Success: %v\n", idx+1, result.Success)
-				// }
+	// fmt.Printf("Processing %d records in batches of %d with %v delay between batches\n",
+	// 	len(records), batchSize, batchDelay)
 
-				results[idx] = result
-				records[idx].Card = ""
-			}
-		}()
+	for batchStart := 0; batchStart < len(records); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(records) {
+			batchEnd = len(records)
+		}
+
+		// fmt.Printf("Processing batch %d-%d...\n", batchStart+1, batchEnd)
+
+		var waitGroup sync.WaitGroup
+		workerCount := 2
+		jobs := make(chan int, batchEnd-batchStart)
+
+		for w := 0; w < workerCount; w++ {
+			waitGroup.Add(1)
+			go func() {
+				defer waitGroup.Done()
+				for idx := range jobs {
+					rec := records[idx]
+					result := client.Charge(chargeapi.ChargeRequest{
+						Name:     rec.Name,
+						Amount:   rec.Amount,
+						Card:     rec.Card,
+						CVV:      rec.CVV,
+						ExpMonth: rec.ExpMonth,
+						ExpYear:  rec.ExpYear,
+					})
+
+					// if !result.Success {
+					// 	fmt.Printf("Charge %d failed: %v\n", idx+1, result.Error)
+					// } else {
+					// 	fmt.Printf("Charge %d Success: %v\n", idx+1, result.Success)
+					// }
+
+					results[idx] = result
+					records[idx].Card = ""
+				}
+			}()
+		}
+
+		for i := batchStart; i < batchEnd; i++ {
+			jobs <- i
+		}
+
+		close(jobs)
+		waitGroup.Wait()
+
+		if batchEnd < len(records) {
+			// fmt.Printf("Waiting %v before next batch...\n", batchDelay)
+			time.Sleep(batchDelay)
+		}
 	}
-
-	for i := range records {
-		jobs <- i
-	}
-
-	close(jobs)
-	waitGroup.Wait()
 
 	sum := summary.CalculateTotalSummary(records, results)
 	summary.PrintSummary(sum)

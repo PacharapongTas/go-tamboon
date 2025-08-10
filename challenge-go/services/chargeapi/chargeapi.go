@@ -2,19 +2,30 @@ package chargeapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 type OmiseClient struct {
-	SecretKey string
-	PublicKey string
-	BaseURL   string
+	SecretKey   string
+	PublicKey   string
+	BaseURL     string
+	rateLimiter *RateLimiter
+}
+
+type RateLimiter struct {
+	tokens     chan struct{}
+	interval   time.Duration
+	maxTokens  int
+	mu         sync.Mutex
+	lastRefill time.Time
 }
 
 type ChargeRequest struct {
@@ -86,23 +97,69 @@ func (e OmiseError) Error() string {
 	return fmt.Sprintf("Omise API Error (%s): %s", e.Code, e.Message)
 }
 
-func NewOmiseClient(secretKey, publicKey string) *OmiseClient {
+func (rl *RateLimiter) refillTokens() {
+	ticker := time.NewTicker(rl.interval / time.Duration(rl.maxTokens))
+	defer ticker.Stop()
+
+	for range ticker.C {
+		rl.mu.Lock()
+		select {
+		case rl.tokens <- struct{}{}:
+		default:
+		}
+		rl.mu.Unlock()
+	}
+}
+
+func (rl *RateLimiter) Wait(ctx context.Context) error {
+	select {
+	case <-rl.tokens:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func NewRateLimiter(maxRequests int, interval time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		tokens:     make(chan struct{}, maxRequests),
+		interval:   interval,
+		maxTokens:  maxRequests,
+		lastRefill: time.Now(),
+	}
+
+	for i := 0; i < maxRequests; i++ {
+		rl.tokens <- struct{}{}
+	}
+
+	go rl.refillTokens()
+
+	return rl
+}
+
+func NewOmiseClient(secretKey, publicKey string, rateLimit int) *OmiseClient {
 	baseOmiseURL := "https://api.omise.co"
 	return &OmiseClient{
-		SecretKey: secretKey,
-		PublicKey: publicKey,
-		BaseURL:   baseOmiseURL,
+		SecretKey:   secretKey,
+		PublicKey:   publicKey,
+		BaseURL:     baseOmiseURL,
+		rateLimiter: NewRateLimiter(rateLimit, time.Second),
 	}
 }
 
 func (c *OmiseClient) CreateCardToken(cardNumber, holderName, cvv, expMonth, expYear string) (string, error) {
+
+	// For test
+	// plusYear, _ := strconv.Atoi(expYear)
+
 	cardReq := OmiseCardRequest{
 		Card: OmiseCardData{
 			Name:            holderName,
 			Number:          cardNumber,
 			ExpirationMonth: expMonth,
-			ExpirationYear:  expYear,
-			SecurityCode:    cvv,
+			// ExpirationYear:  strconv.Itoa(plusYear + 3),
+			ExpirationYear: expYear,
+			SecurityCode:   cvv,
 		},
 	}
 
@@ -110,6 +167,13 @@ func (c *OmiseClient) CreateCardToken(cardNumber, holderName, cvv, expMonth, exp
 }
 
 func (c *OmiseClient) createCardTokenWithData(cardReq OmiseCardRequest) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return "", fmt.Errorf("Rate limit timeout: %w", err)
+	}
+
 	formData := url.Values{}
 	formData.Set("card[name]", cardReq.Card.Name)
 	formData.Set("card[number]", cardReq.Card.Number)
@@ -151,6 +215,15 @@ func (c *OmiseClient) createCardTokenWithData(cardReq OmiseCardRequest) (string,
 }
 
 func (c *OmiseClient) Charge(req ChargeRequest) ChargeResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return ChargeResponse{
+			Success: false,
+			Error:   fmt.Errorf("rate limit timeout: %w", err),
+		}
+	}
 
 	cardToken, err := c.CreateCardToken(req.Card, req.Name, req.CVV, req.ExpMonth, req.ExpYear)
 	if err != nil {
@@ -160,12 +233,22 @@ func (c *OmiseClient) Charge(req ChargeRequest) ChargeResponse {
 		}
 	}
 
-	convertSatangToBath := req.Amount * 100
+	convertBathToSatang := req.Amount * 100
 	currencyType := "thb"
+
+	// For minimum base on Thailand (minimum: ฿20)
+	if convertBathToSatang < 2000 {
+		convertBathToSatang = 2000
+	}
+
+	// For maximum base on Thailand (maximum: ฿150,000)
+	if convertBathToSatang > 15000000 {
+		convertBathToSatang = 15000000
+	}
 
 	// Prepare Omise request format.
 	omiseReq := OmiseRequest{
-		Amount:      convertSatangToBath,
+		Amount:      convertBathToSatang,
 		Currency:    currencyType,
 		Card:        cardToken,
 		Description: fmt.Sprintf("Donate from  %s", req.Name),

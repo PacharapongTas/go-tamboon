@@ -5,6 +5,7 @@ import (
 	"go-tamboon/services/chargeapi"
 	"go-tamboon/services/csvparser"
 	"sort"
+	"strings"
 )
 
 type Summary struct {
@@ -73,12 +74,10 @@ func PrintSummary(s Summary) {
 	fmt.Printf(" successfully donated: %9.2f\n", float64(s.SuccessDonated))
 	fmt.Printf(" faulty donation: %9.2f\n", float64(s.FaiedDonated))
 	fmt.Printf("\n average per person: %9.2f\n", float64(s.AveragePerPerson))
-	fmt.Printf(" top donors: \n")
+	fmt.Println(" top donors: " + s.TopDonors[0])
 
-	for idx, donorName := range s.TopDonors {
-		if idx != 0 {
-			fmt.Printf("%s\n", donorName)
-		}
+	padding := strings.Repeat(" ", len(" top donors: "))
+	for _, donorName := range s.TopDonors[1:] {
+		fmt.Println(padding + donorName)
 	}
-
 }
