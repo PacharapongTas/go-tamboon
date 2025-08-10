@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go-tamboon/cipher"
+	"go-tamboon/services/csvparser"
 	"io"
 	"os"
 )
@@ -31,4 +32,12 @@ func main() {
 
 	// fmt.Println("-- Data After Decode --")
 	// fmt.Println(buffer.String())
+
+	records, err := csvparser.ParseCSV(bytes.NewReader(buffer.Bytes()))
+	if err != nil {
+		fmt.Println("Error Parsing CSV: ", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("records", records)
 }
