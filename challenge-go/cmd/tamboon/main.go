@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go-tamboon/cipher"
+	"go-tamboon/config"
 	"go-tamboon/services/csvparser"
 	"io"
 	"os"
@@ -40,4 +41,7 @@ func main() {
 	}
 
 	fmt.Println("records", records)
+
+	cfg := config.LoadConfig()
+	fmt.Println("cfg", cfg)
 }
