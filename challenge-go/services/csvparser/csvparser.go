@@ -7,9 +7,12 @@ import (
 )
 
 type DataRecord struct {
-	Name   string
-	Amount int
-	Card   string
+	Name     string
+	Amount   int
+	Card     string
+	CVV      string
+	ExpMonth string
+	ExpYear  string
 }
 
 func ParseCSV(r io.Reader) ([]DataRecord, error) {
@@ -38,9 +41,12 @@ func ParseCSV(r io.Reader) ([]DataRecord, error) {
 		}
 
 		records = append(records, DataRecord{
-			Name:   row[0],
-			Amount: amount,
-			Card:   row[2],
+			Name:     row[0],
+			Amount:   amount,
+			Card:     row[2],
+			CVV:      row[3],
+			ExpMonth: row[4],
+			ExpYear:  row[5],
 		})
 	}
 

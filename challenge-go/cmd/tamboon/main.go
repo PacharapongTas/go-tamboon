@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"go-tamboon/cipher"
 	"go-tamboon/config"
+	"go-tamboon/services/chargeapi"
 	"go-tamboon/services/csvparser"
+	"go-tamboon/services/summary"
 	"io"
 	"os"
+	"sync"
 )
 
 func main() {
@@ -40,8 +43,51 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("records", records)
+	// fmt.Println("records", records)
 
 	cfg := config.LoadConfig()
-	fmt.Println("cfg", cfg)
+	var client chargeapi.Client
+	client = chargeapi.NewOmiseClient(cfg.ChargeSecretKey, cfg.ChargePublicKey)
+
+	results := make([]chargeapi.ChargeResponse, len(records))
+	var waitGroup sync.WaitGroup
+	workerCount := 8
+	jobs := make(chan int, len(records))
+
+	for w := 0; w < workerCount; w++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			for idx := range jobs {
+				rec := records[idx]
+				result := client.Charge(chargeapi.ChargeRequest{
+					Name:     rec.Name,
+					Amount:   rec.Amount,
+					Card:     rec.Card,
+					CVV:      rec.CVV,
+					ExpMonth: rec.ExpMonth,
+					ExpYear:  rec.ExpYear,
+				})
+
+				// if !result.Success {
+				// 	fmt.Printf("Charge %d failed: %v\n", idx+1, result.Error)
+				// } else {
+				// 	fmt.Printf("Charge %d Success: %v\n", idx+1, result.Success)
+				// }
+
+				results[idx] = result
+				records[idx].Card = ""
+			}
+		}()
+	}
+
+	for i := range records {
+		jobs <- i
+	}
+
+	close(jobs)
+	waitGroup.Wait()
+
+	sum := summary.CalculateTotalSummary(records, results)
+	summary.PrintSummary(sum)
 }

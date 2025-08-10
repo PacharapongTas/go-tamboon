@@ -7,18 +7,16 @@ import (
 )
 
 type Config struct {
-	chargeSecretKey  string
-	chargePublicKey  string
-	omiseEnvironment string
+	ChargeSecretKey string
+	ChargePublicKey string
 }
 
 func LoadConfig() *Config {
 	LoadEnvFromFile(".env")
 
 	config := &Config{
-		chargeSecretKey:  getEnv("CHARGE_SECRET_KEY", ""),
-		chargePublicKey:  getEnv("CHARGE_PUBLIC_KEY", ""),
-		omiseEnvironment: getEnv("OMISE_ENVIRONMENT", "test"),
+		ChargeSecretKey: getEnv("CHARGE_SECRET_KEY", ""),
+		ChargePublicKey: getEnv("CHARGE_PUBLIC_KEY", ""),
 	}
 
 	return config
