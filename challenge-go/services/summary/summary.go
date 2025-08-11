@@ -2,7 +2,7 @@ package summary
 
 import (
 	"fmt"
-	"go-tamboon/services/chargeapi"
+	"go-tamboon/services/charge_api"
 	"go-tamboon/services/csvparser"
 	"sort"
 	"strings"
@@ -11,7 +11,7 @@ import (
 type Summary struct {
 	TotalReceived    int
 	SuccessDonated   int
-	FaiedDonated     int
+	FailedDonated    int
 	AveragePerPerson float64
 	TopDonors        []string
 }
@@ -21,7 +21,7 @@ type Donor struct {
 	Total int
 }
 
-func CalculateTotalSummary(records []csvparser.DataRecord, results []chargeapi.ChargeResponse) Summary {
+func CalculateTotalSummary(records []csvparser.DataRecord, results []charge_api.ChargeResponse) Summary {
 	total := 0
 	success := 0
 	fault := 0
@@ -63,21 +63,92 @@ func CalculateTotalSummary(records []csvparser.DataRecord, results []chargeapi.C
 	return Summary{
 		TotalReceived:    total,
 		SuccessDonated:   success,
-		FaiedDonated:     fault,
+		FailedDonated:    fault,
 		AveragePerPerson: average,
 		TopDonors:        topDonors,
 	}
 }
 
-func PrintSummary(s Summary) {
-	fmt.Printf("\n total received: THB %9.2f\n", float64(s.TotalReceived))
-	fmt.Printf(" successfully donated: %9.2f\n", float64(s.SuccessDonated))
-	fmt.Printf(" faulty donation: %9.2f\n", float64(s.FaiedDonated))
-	fmt.Printf("\n average per person: %9.2f\n", float64(s.AveragePerPerson))
-	fmt.Println(" top donors: " + s.TopDonors[0])
+func addComma(s string) string {
+	neg := false
+	if strings.HasPrefix(s, "-") {
+		neg = true
+		s = s[1:]
+	}
+	n := len(s)
+	if n <= 3 {
+		if neg {
+			return "-" + s
+		}
+		return s
+	}
+	var b strings.Builder
+	pre := n % 3
+	if pre == 0 {
+		pre = 3
+	}
+	b.WriteString(s[:pre])
+	for i := pre; i < n; i += 3 {
+		b.WriteByte(',')
+		b.WriteString(s[i : i+3])
+	}
+	out := b.String()
+	if neg {
+		return "-" + out
+	}
+	return out
+}
 
-	padding := strings.Repeat(" ", len(" top donors: "))
+func formatBaht(v float64) string {
+	s := fmt.Sprintf("%.2f", v)
+	dot := strings.LastIndexByte(s, '.')
+	intPart, fracPart := s[:dot], s[dot:]
+	return addComma(intPart) + fracPart
+}
+
+func maxWidth(vals []string) int {
+	max := 0
+	for _, s := range vals {
+		length := len(s)
+		if length > max {
+			max = length
+		}
+	}
+	return max
+}
+
+func PrintSummary(s Summary) {
+	labels := []string{
+		" total received:",
+		" successfully donated:",
+		" faulty donation:",
+		" average per person:",
+		" top donors:",
+	}
+	labelWidth := maxWidth(labels)
+
+	summaryValue := []string{
+		formatBaht(float64(s.TotalReceived)),
+		formatBaht(float64(s.SuccessDonated)),
+		formatBaht(float64(s.FailedDonated)),
+		formatBaht(float64(s.AveragePerPerson)),
+	}
+
+	summaryValueWidth := maxWidth(summaryValue)
+
+	fmt.Printf("%*s THB %*s\n", labelWidth, labels[0], summaryValueWidth, summaryValue[0])
+	fmt.Printf("%*s THB %*s\n", labelWidth, labels[1], summaryValueWidth, summaryValue[1])
+	fmt.Printf("%*s THB %*s\n", labelWidth, labels[2], summaryValueWidth, summaryValue[2])
+	fmt.Println()
+	fmt.Printf("%*s THB %*s\n", labelWidth, labels[3], summaryValueWidth, summaryValue[3])
+
+	if len(s.TopDonors) == 0 {
+		fmt.Printf("%*s %s \n", labelWidth, labels[4], "-")
+		return
+	}
+
+	fmt.Printf("%*s %s \n", labelWidth, labels[4], s.TopDonors[0])
 	for _, donorName := range s.TopDonors[1:] {
-		fmt.Println(padding + donorName)
+		fmt.Printf("%*s %*s\n", labelWidth, "", summaryValueWidth, donorName)
 	}
 }

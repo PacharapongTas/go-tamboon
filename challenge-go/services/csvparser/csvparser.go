@@ -39,7 +39,7 @@ func ParseCSV(r io.Reader) ([]DataRecord, error) {
 		if err != nil {
 			amount = 0
 		}
-
+		// Data column from CSV file [Format]: Name,AmountSubunits,CCNumber,CVV,ExpMonth,ExpYear
 		records = append(records, DataRecord{
 			Name:     row[0],
 			Amount:   amount,

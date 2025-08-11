@@ -67,3 +67,9 @@ done.
  [0]: https://www.omise.co/charges-api
  [1]: https://en.wikipedia.org/wiki/Caesar_cipher
  [2]: https://play.golang.org/p/dCWYyWPHwj4
+
+**For run & test step**
+```sh
+go run ./cmd/tamboon 
+go test ./cmd/tamboon  
+```

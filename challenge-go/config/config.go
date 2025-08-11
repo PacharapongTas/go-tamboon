@@ -9,37 +9,37 @@ import (
 )
 
 type Config struct {
-	ChargeSecretKey string
-	ChargePublicKey string
-	BatchSize       int
-	BatchDelay      time.Duration
-	RateLimit       int
+	OmiseSecretKey string
+	OmisePublicKey string
+	BatchSize      int
+	BatchDelay     time.Duration
+	RateLimit      int
 }
 
 func LoadConfig() *Config {
 	LoadEnvFromFile(".env")
 
-	batchSize, _ := strconv.Atoi(getEnv("BATCH_SIZE", "40"))
+	batchSize, _ := strconv.Atoi(getEnv("BATCH_SIZE", "60"))
 	if batchSize <= 0 {
 		batchSize = 40
 	}
 
-	batchDelayed, _ := strconv.Atoi(getEnv("BATCH_DELAY_SECONDS", "20"))
+	batchDelayed, _ := strconv.Atoi(getEnv("BATCH_DELAY_SECONDS", "10"))
 	if batchDelayed <= 0 {
 		batchDelayed = 20
 	}
 
-	rateLimit, _ := strconv.Atoi(getEnv("RATE_LIMIT", "5"))
+	rateLimit, _ := strconv.Atoi(getEnv("RATE_LIMIT", "3"))
 	if rateLimit <= 0 {
 		rateLimit = 5
 	}
 
 	config := &Config{
-		ChargeSecretKey: getEnv("CHARGE_SECRET_KEY", ""),
-		ChargePublicKey: getEnv("CHARGE_PUBLIC_KEY", ""),
-		BatchSize:       batchSize,
-		BatchDelay:      time.Duration(batchDelayed) * time.Second,
-		RateLimit:       rateLimit,
+		OmiseSecretKey: getEnv("OMISE_SECRET_KEY", ""),
+		OmisePublicKey: getEnv("OMISE_PUBLIC_KEY", ""),
+		BatchSize:      batchSize,
+		BatchDelay:     time.Duration(batchDelayed) * time.Second,
+		RateLimit:      rateLimit,
 	}
 
 	return config

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"go-tamboon/cipher"
 	"go-tamboon/config"
-	"go-tamboon/services/chargeapi"
+	"go-tamboon/services/charge_api"
 	"go-tamboon/services/csvparser"
 	"go-tamboon/services/summary"
 	"io"
@@ -35,28 +35,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// fmt.Println("-- Data After Decode --")
-	// fmt.Println(buffer.String())
-
 	records, err := csvparser.ParseCSV(bytes.NewReader(buffer.Bytes()))
 	if err != nil {
 		fmt.Println("Error Parsing CSV: ", err)
 		os.Exit(1)
 	}
 
-	// fmt.Println("records", records)
-
 	cfg := config.LoadConfig()
-	var client chargeapi.Client
-	client = chargeapi.NewOmiseClient(cfg.ChargeSecretKey, cfg.ChargePublicKey, cfg.RateLimit)
+	var client charge_api.Client
+	client = charge_api.NewOmiseClient(cfg.OmiseSecretKey, cfg.OmisePublicKey, cfg.RateLimit)
 
-	results := make([]chargeapi.ChargeResponse, len(records))
+	results := make([]charge_api.ChargeResponse, len(records))
 
+	// Process in batches (Size and Delay).
 	batchSize := cfg.BatchSize
 	batchDelay := cfg.BatchDelay
 
-	// fmt.Printf("Processing %d records in batches of %d with %v delay between batches\n",
-	// 	len(records), batchSize, batchDelay)
+	// Log for tracking process.
+	fmt.Printf("Processing %d records in batches of %d with %v delay between batches\n",
+		len(records), batchSize, batchDelay)
 
 	for batchStart := 0; batchStart < len(records); batchStart += batchSize {
 		batchEnd := batchStart + batchSize
@@ -64,10 +61,12 @@ func main() {
 			batchEnd = len(records)
 		}
 
-		// fmt.Printf("Processing batch %d-%d...\n", batchStart+1, batchEnd)
+		// Log for tracking process.
+		fmt.Printf("Processing batch %d-%d...\n", batchStart+1, batchEnd)
 
+		// Process current batch with workers.
 		var waitGroup sync.WaitGroup
-		workerCount := 2
+		workerCount := 2 // Reduce concurrent workers per batch.
 		jobs := make(chan int, batchEnd-batchStart)
 
 		for w := 0; w < workerCount; w++ {
@@ -76,7 +75,7 @@ func main() {
 				defer waitGroup.Done()
 				for idx := range jobs {
 					rec := records[idx]
-					result := client.Charge(chargeapi.ChargeRequest{
+					result := client.Charge(charge_api.ChargeRequest{
 						Name:     rec.Name,
 						Amount:   rec.Amount,
 						Card:     rec.Card,
@@ -85,13 +84,15 @@ func main() {
 						ExpYear:  rec.ExpYear,
 					})
 
-					// if !result.Success {
-					// 	fmt.Printf("Charge %d failed: %v\n", idx+1, result.Error)
-					// } else {
-					// 	fmt.Printf("Charge %d Success: %v\n", idx+1, result.Success)
-					// }
+					// Log for tracking process.
+					if !result.Success {
+						fmt.Printf("Charge %d failed: %v\n", idx+1, result.Error)
+					} else {
+						fmt.Printf("Charge %d Success: %v\n", idx+1, result.Success)
+					}
 
 					results[idx] = result
+					// Wipe card number from memory
 					records[idx].Card = ""
 				}
 			}()
@@ -105,11 +106,13 @@ func main() {
 		waitGroup.Wait()
 
 		if batchEnd < len(records) {
-			// fmt.Printf("Waiting %v before next batch...\n", batchDelay)
+			// Log for tracking process.
+			fmt.Printf("Waiting %v before next batch...\n", batchDelay)
 			time.Sleep(batchDelay)
 		}
 	}
 
+	// Summary Result.
 	sum := summary.CalculateTotalSummary(records, results)
 	summary.PrintSummary(sum)
 }
