@@ -1,3 +1,15 @@
+# Remark 
+Now it seems like CSV files only have data for the year 2023 at the most, So when shooting omise API, You will get only => "expire date cannot be in the part". Adjust the data for testing by giving Year + 3 (Apply all of data).
+
+**Result**
+![Summary Screen Shot](./assets/summary_result.png)
+
+**For run & test step**
+```sh
+go run ./cmd/tamboon 
+go test ./cmd/tamboon  
+```
+
 # GO-TAMBOON ไปทำบุญ
 
 This is a small challenge project to see how good you are with Go. Included in this
@@ -68,8 +80,3 @@ done.
  [1]: https://en.wikipedia.org/wiki/Caesar_cipher
  [2]: https://play.golang.org/p/dCWYyWPHwj4
 
-**For run & test step**
-```sh
-go run ./cmd/tamboon 
-go test ./cmd/tamboon  
-```
